@@ -1,0 +1,51 @@
+{
+    "name": "movearguments",
+    "displayName": "MoveArguments",
+    "description": "adds actions to move arguments.",
+    "version": "1.0.0",
+    "publisher": "kkapsner",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/kkapsner/vscode-movearguments.git"
+    },
+    "license": "MIT",
+    "engines": {
+        "vscode": "^1.20.0"
+    },
+    "categories": [
+        "Other"
+    ],
+    "activationEvents": [
+        "onCommand:movearguments.action.moveLeft",
+        "onCommand:movearguments.action.moveRight"
+    ],
+    "main": "./out/extension",
+    "contributes": {
+        "commands": [
+            {
+                "command": "movearguments.action.moveLeft",
+                "title": "Moves the selected argument left"
+            },
+            {
+                "command": "movearguments.action.moveRight",
+                "title": "Moves the selected argument right"
+            }
+        ]
+    },
+    "scripts": {
+        "vscode:prepublish": "npm run compile",
+        "compile": "tsc -p ./",
+        "watch": "tsc -watch -p ./",
+        "postinstall": "node ./node_modules/vscode/bin/install",
+        "test": "npm run compile && node ./node_modules/vscode/bin/test"
+    },
+    "devDependencies": {
+        "@types/chai": "^4.1.2",
+        "@types/mocha": "^2.2.42",
+        "@types/node": "^7.0.43",
+        "chai": "^4.1.2",
+        "tslint": "^5.8.0",
+        "typescript": "^2.6.1",
+        "vscode": "^1.1.6"
+    }
+}
