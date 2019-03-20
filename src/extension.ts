@@ -1,20 +1,51 @@
 'use strict';
 import * as vscode from 'vscode';
 
+/**
+ * Representation of an argument
+ */
 class Argument {
+	/**
+	 * The start of the argument - including whitespaces at the start
+	 */
 	private startPosition: vscode.Position;
+	/**
+	 * The start of the content of the argument
+	 */
 	private startOfContent: vscode.Position;
+	/**
+	 * The end of the argument - including whitespaces at the end
+	 */
 	private endPosition: vscode.Position;
+	/**
+	 * The end of the content of the argument
+	 */
 	private endOfContent: vscode.Position;
+	/**
+	 * The document to work in
+	 */
 	private document: vscode.TextDocument;
-	
+	/**
+	 * The content of the argument
+	 */
 	private content: string;
-	
+	/**
+	 * If the argument is the first in the list
+	 */
 	private isFirstArgument: Boolean = true;
+	/**
+	 * If the argument is the last in the list
+	 */
 	private isLastArgument: Boolean = true;
-	
+	/**
+	 * If the original selection was reversed
+	 */
 	private selectionIsReversed: Boolean;
 	
+	/**
+	 * @param document The document to work in
+	 * @param selection The original selection
+	 */
 	constructor(document: vscode.TextDocument, selection: vscode.Selection){
 		this.selectionIsReversed = !selection.isEmpty && selection.isReversed;
 		this.document = document;
@@ -94,11 +125,17 @@ class Argument {
 		this.endOfContent = document.positionAt(document.offsetAt(this.endPosition) - finishingWhitespace[0].length);
 	}
 	
+	/**
+	 * Cache for the getPreviousArgument function.
+	 */
 	private previousCache: Argument|null = null;
+	/**
+	 * @return The previous argument in the list or null if there is none.
+	 */
 	getPreviousArgument(){
 		if (!this.isFirstArgument){
 			if (!this.previousCache){
-				const beforeComma = this.document.positionAt(this.document.offsetAt(this.startPosition) - 1);
+				const beforeComma = this.startPosition.translate(undefined, -1);
 				this.previousCache = new Argument(this.document, new vscode.Selection(beforeComma, beforeComma));
 				this.previousCache.selectionIsReversed = this.selectionIsReversed;
 			}
@@ -109,11 +146,17 @@ class Argument {
 		}
 	}
 	
+	/**
+	 * Cache for the getNextArgument function.
+	 */
 	private nextCache: Argument|null = null;
+	/**
+	 * @return The next argument in the list or null if there is none.
+	 */
 	getNextArgument(){
 		if (!this.isLastArgument){
 			if (!this.nextCache){
-				const afterComma = this.document.positionAt(this.document.offsetAt(this.endPosition) + 1);
+				const afterComma = this.endPosition.translate(undefined, 1);
 				this.nextCache = new Argument(this.document, new vscode.Selection(afterComma, afterComma));
 				this.nextCache.selectionIsReversed = this.selectionIsReversed;
 			}
@@ -124,36 +167,66 @@ class Argument {
 		}
 	}
 	
+	/**
+	 * Start of the content of the argument
+	 */
 	get start(){
 		return this.startOfContent;
 	}
 	
+	/**
+	 * End of the content of the argument
+	 */
 	get end(){
 		return this.endOfContent;
 	}
 	
+	/**
+	 * Range of the content of the argument
+	 */
 	get range(){
-		return new vscode.Range(this.start, this.end);
+		return new vscode.Range(this.startOfContent, this.endOfContent);
 	}
 	
+	/**
+	 * Selection of the content of the argument
+	 */
 	get selection(){
 		return this.selectionIsReversed?
-			new vscode.Selection(this.end, this.start):
-			new vscode.Selection(this.start, this.end);
+			new vscode.Selection(this.endOfContent, this.startOfContent):
+			new vscode.Selection(this.startOfContent, this.endOfContent);
 	}
 	
+	/**
+	 * @return The content of the argument
+	 */
 	getContent() {
 		return this.content;
 	}
 	
+	/**
+	 * Checks if two arguments are the same. Only usable with non overlapping arguments.
+	 * 
+	 * @param argument The argument to compare against.
+	 */
 	equals(argument: Argument){
 		return this.startPosition.isEqual(argument.startPosition);
 	}
 	
+	/**
+	 * Checks if two arguments overlap. Only usable when arguments might overlap with a common end.
+	 * 
+	 * @param argument The argument to check against.
+	 */
 	overlap(argument: Argument){
 		return this.startPosition.isEqual(argument.startPosition) || this.endPosition.isEqual(argument.endPosition);
 	}
 	
+	/**
+	 * Checks if the argument is bigger as the 
+	 * 
+	 * @param argument The argument to compare against.
+	 */
 	isBiggerThan(argument: Argument){
 		return this.content.length > argument.content.length;
 	}
@@ -164,13 +237,24 @@ interface ArgumentSwap {
 	contentArgument: Argument;
 }
 
+/**
+ * Object to manage the argument movements.
+ */
 class ArgumentMover {
 	private swaps: ArgumentSwap[];
 	constructor(){
 		this.swaps = [];
 	}
+	
+	/**
+	 * Registers a movement of a target.
+	 * 
+	 * @param argument The argument to move to a different spot.
+	 * @param targetArgument The target position of the argument
+	 */
 	move(argument: Argument, targetArgument: Argument){
 		let currentSwap: null|ArgumentSwap = null;
+		// Is the argument already being moved by a previous call?
 		this.swaps.some((swap) => {
 			if (swap.contentArgument.equals(argument)){
 				currentSwap = swap;
@@ -178,7 +262,6 @@ class ArgumentMover {
 			}
 			return false;
 		});
-		
 		if (!currentSwap){
 			currentSwap = {
 				positionArgument: argument,
@@ -187,6 +270,7 @@ class ArgumentMover {
 			this.swaps.push(currentSwap);
 		}
 		
+		// Is something else already put in the target spot?
 		let currentTargetSwap: null|ArgumentSwap = null;
 		this.swaps.some((swap) => {
 			if (swap.positionArgument.equals(targetArgument)){
@@ -203,10 +287,17 @@ class ArgumentMover {
 			this.swaps.push(currentTargetSwap);
 		}
 		
+		// Perform the actual movement
 		const h = currentSwap.contentArgument;
 		currentSwap.contentArgument = currentTargetSwap.contentArgument;
 		currentTargetSwap.contentArgument = h;
 	}
+	
+	/**
+	 * Perform the registered movements. Do not use the object after calling this function.
+	 * 
+	 * @param edit The native object to do the text replacements
+	 */
 	edit(edit: vscode.TextEditorEdit){
 		this.swaps.forEach((swap) => {
 			edit.replace(swap.positionArgument.range, swap.contentArgument.getContent());
@@ -253,6 +344,13 @@ function getFirstInLine(argument: Argument, list: Argument[], targetArgumentFunc
 	return argument;
 }
 
+/**
+ * Core function to do the commands.
+ * 
+ * @param editor Native editor object provided by the API
+ * @param edit Native edit object provided by the API
+ * @param targetArgumentFunction Function to be called on the argument to get the target spot
+ */
 function move(editor: vscode.TextEditor, edit: vscode.TextEditorEdit, targetArgumentFunction: "getPreviousArgument"|"getNextArgument"){
 	const mover = new ArgumentMover();
 	const newSelections: vscode.Selection[] = editor.selections.map((selection) => {
@@ -260,6 +358,7 @@ function move(editor: vscode.TextEditor, edit: vscode.TextEditorEdit, targetArgu
 	}).filter((argument, index, list) => {
 		for (let i = index + 1; i < list.length; i += 1){
 			if (argument.overlap(list[i])){
+				// remove overlapping and duplicated arguments and keep the bigger argument
 				if (argument.isBiggerThan(list[i])){
 					list[i] = argument;
 				}

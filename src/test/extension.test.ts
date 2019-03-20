@@ -1,148 +1,4 @@
-import * as vscode from 'vscode';
-import * as chai from 'chai';
-// import * as duplicateSelection from '../extension';
-
-interface EditorState {
-	text: string;
-	selections: Array<[number, number, number, number]>;
-}
-
-function parseEditorState(string: string): EditorState{
-	const selections: Array<[number, number, number, number]> = [];
-	var lineNumber = 0;
-	var characterOffset = 0;
-	const text = string.replace(/([\s\S]*?)\[([^\]]*)\](<?)/g, function(match, before: string, inside: string, reverse: string){
-		const linesBefore = before.replace(/[^\n]/g, "").length;
-		if (linesBefore){
-			characterOffset = (/[^\n]*$/.exec(before) || [""])[0].length;
-			lineNumber += linesBefore;
-		}
-		else {
-			characterOffset += before.length;
-		}
-		
-		const linesWithin = inside.replace(/[^\n]/g, "").length;
-		let endOffset = 0;
-		if (linesWithin){
-			endOffset = (/[^\n]*$/.exec(inside) || [""])[0].length;
-		}
-		else {
-			endOffset = characterOffset + inside.length;
-		}
-		
-		if (reverse === "<"){
-			selections.push([lineNumber + linesWithin, endOffset, lineNumber, characterOffset]);
-		}
-		else {
-			selections.push([lineNumber, characterOffset, lineNumber + linesWithin, endOffset]);
-		}
-		characterOffset = endOffset;
-		lineNumber += linesWithin;
-		
-		lineNumber += inside.replace(/[^\n]/g, "").length;
-		return before + inside;
-	});
-	return {
-		text,
-		selections
-	};
-}
-
-function wait<valueType>(ms: number){
-	return function(value: valueType){
-		return new Promise(function(resolve: (value: valueType) => void, reject){
-			setTimeout(() => {
-				resolve(value);
-			}, ms);
-		});
-	};
-}
-
-function initializeEditor(initialState: EditorState){
-	return vscode.commands.executeCommand("workbench.action.files.newUntitledFile")
-		.then(wait(0))
-		.then((): vscode.TextEditor => {
-			var editor = vscode.window.activeTextEditor;
-			chai.expect(editor).not.to.be.equal(undefined, "No editor found.");
-			return editor as vscode.TextEditor;
-		}).then((editor: vscode.TextEditor) => {
-			return editor.edit((edit) => {
-				edit.insert(new vscode.Position(0, 0), initialState.text);
-			}).then(() => {
-				editor.selections = initialState.selections.map(function(selection){
-					return new vscode.Selection(
-						new vscode.Position(selection[0], selection[1]),
-						new vscode.Position(selection[2], selection[3])
-					);
-				});
-				return editor;
-			});
-		});
-}
-
-function confirmEditorState(editor: vscode.TextEditor, state: EditorState){
-	chai.expect(editor.document.getText()).to.be.equal(state.text, "Document contains wrong text.");
-	chai.expect(editor.selections.length).to.be.equal(state.selections.length, "Wrong number of selections.");
-	state.selections.forEach(function(selection, index){
-		var editorSelection = editor.selections[index];
-		chai.expect([
-			editorSelection.anchor.line,
-			editorSelection.anchor.character,
-			editorSelection.active.line,
-			editorSelection.active.character,
-		]).to.deep.equal(selection, `Wrong selection ${index}`);
-	});
-	return true;
-}
-
-function runFileTestWithAllBrackets(
-	initialState: EditorState,
-	commands: Array<string | ((editor: vscode.TextEditor) => undefined)>,
-	endState: EditorState
-){
-	return runFileTest(initialState, commands, endState).then((success) => {
-		if (success && initialState.text.length < 200){
-			initialState.text = initialState.text.replace(/\(/g, "{").replace(/\)/g, "}");
-			endState.text = endState.text.replace(/\(/g, "{").replace(/\)/g, "}");
-			return runFileTest(initialState, commands, endState).then((success) => {
-				if (success){
-					initialState.text = initialState.text.replace(/\{/g, "[").replace(/\}/g, "]");
-					endState.text = endState.text.replace(/\{/g, "[").replace(/\}/g, "]");
-					return runFileTest(initialState, commands, endState);
-				}
-				else {
-					return success;
-				}
-			});
-		}
-		else {
-			return success;
-		}
-	});
-}
-function runFileTest(
-	initialState: EditorState,
-	commands: Array<string | ((editor: vscode.TextEditor) => undefined)>,
-	endState: EditorState
-){
-	return initializeEditor(initialState)
-		.then(wait(0))
-		.then((editor) => {
-			commands.forEach(function(command){
-				if (typeof command === "string"){
-					const start = Date.now();
-					vscode.commands.executeCommand(command);
-					console.log("Command time ", Date.now() - start, "ms");
-				}
-				else {
-					command(editor);
-				}
-			});
-			return editor;
-		})
-		.then(wait(200))
-		.then((editor) => {return confirmEditorState(editor, endState);});
-}
+import {EditorState, parseEditorState, runFileTest, runFileTestWithAllBrackets} from './testAPI';
 
 suite("movearguments tests", function(){
 	test(
@@ -504,6 +360,22 @@ suite("movearguments tests", function(){
 		() => {
 			const initialState: EditorState = parseEditorState(`function(a, []b,[ ]<c, d)`);
 			const endState: EditorState = parseEditorState(`function([b], [c]<, a, d)`);
+			return runFileTestWithAllBrackets(initialState, ["movearguments.action.moveLeft"], endState);
+		}
+	);
+	test(
+		"Move an argument right - comma directly at line break",
+		() => {
+			const initialState: EditorState = parseEditorState(`function(\na\n,\nb[]\n,\nc\n)`);
+			const endState: EditorState = parseEditorState(`function(\na\n,\nc\n,\n[b]\n)`);
+			return runFileTestWithAllBrackets(initialState, ["movearguments.action.moveRight"], endState);
+		}
+	);
+	test(
+		"Move an argument left - comma directly at line break",
+		() => {
+			const initialState: EditorState = parseEditorState(`function(\na\n,\nb[]\n,\nc\n)`);
+			const endState: EditorState = parseEditorState(`function(\n[b]\n,\na\n,\nc\n)`);
 			return runFileTestWithAllBrackets(initialState, ["movearguments.action.moveLeft"], endState);
 		}
 	);
