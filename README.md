@@ -8,7 +8,9 @@ Adds the action movearguments.action.moveLeft and movearguments.action.moveRight
 
 * selects the moved argument after moving
 * preserves the selection direction
-* works with multiple selections
+* works with multiple selections (order of the selected arguments will not be changed)
+* preserves starting and ending whitespaces from the new position
+* does not move arguments out of lists
 
 ## Requirements
 
