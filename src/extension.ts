@@ -33,9 +33,11 @@ class Argument {
 			}
 			else {
 				if (startLineNumber === 0){
+					// no delimiter anywhere before the selection -> start of the document
 					return new vscode.Position(0, 0);
 				}
 				else {
+					// no delimiter in the current line -> search in previous line
 					return getStartPosition(startLineNumber - 1);
 				}
 			}
@@ -44,15 +46,6 @@ class Argument {
 		if (this.startPosition.character !== 0){
 			this.isFirstArgument = document.getText(new vscode.Range(this.startPosition.translate(undefined, -1), this.startPosition)) !== ",";
 		}
-		// const textBefore = document.getText(new vscode.Range(new vscode.Position(0, 0), selection.start));
-		// const matchStart = /[^,({[]*$/.exec(textBefore);
-		// if (matchStart){
-		// 	this.startPosition = document.positionAt(textBefore.length - matchStart[0].length);
-		// 	this.isFirstArgument = textBefore.charAt(textBefore.length - matchStart[0].length - 1) !== ",";
-		// }
-		// else {
-		// 	this.startPosition = new vscode.Position(0, 0);
-		// }
 		
 		// find the end of the argument
 		
@@ -70,38 +63,25 @@ class Argument {
 			}
 			else {
 				if (endLineNumber === lastDocumentLine){
+					// no delimiter anywhere before the selection -> end of the document
 					return new vscode.Position(lastDocumentLine, document.lineAt(lastDocumentLine).text.length);
 				}
 				else {
+					// no delimiter in the current line -> search in next line
 					return getEndPosition(endLineNumber + 1);
 				}
 			}
 		}
 		this.endPosition = getEndPosition(selection.end.line, selection.end.character);
 		
-		// if (
-		// 	this.endPosition.line !== lastDocumentLine &&
-		// 	this.endPosition.character !== document.lineAt(lastDocumentLine).text.length
-		// ){
+		if (
+			this.endPosition.line !== lastDocumentLine ||
+			this.endPosition.character !== document.lineAt(lastDocumentLine).text.length
+		){
 			this.isLastArgument = document.getText(new vscode.Range(this.endPosition, this.endPosition.translate(undefined, 1))) !== ",";
-		// }
+		}
 		
-		// const endOfDocument = document.positionAt(document.getText().length);
-		// const textAfter = document.getText(
-		// 	new vscode.Range(
-		// 		selection.end,
-		// 		endOfDocument
-		// 	)
-		// );
-		// const matchEnd = /^[^,)}\]]*/.exec(textAfter);
-		// if (matchEnd){
-		// 	this.endPosition = document.positionAt(document.offsetAt(selection.end) + matchEnd[0].length);
-		// 	this.isLastArgument = textAfter.charAt(matchEnd[0].length) !== ",";
-		// }
-		// else {
-		// 	this.endPosition = endOfDocument;
-		// }
-		
+		// compute actual content of the argument
 		const allContent = document.getText(new vscode.Range(this.startPosition, this.endPosition));
 		const startingWhitespace = /^\s*/.exec(allContent) || [""];
 		const finishingWhitespace = /\s*$/.exec(allContent) || [""];
