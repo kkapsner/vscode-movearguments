@@ -15,6 +15,15 @@
                 "kind": "build",
                 "isDefault": true
             }
+        },
+        {
+            "label": "build",
+            "type": "shell",
+            "command": "vsce",
+            "args": [
+                "package"
+            ],
+            "problemMatcher": []
         }
     ]
 }
