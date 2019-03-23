@@ -380,6 +380,86 @@ suite("movearguments tests", function(){
 		}
 	);
 	test(
+		"Move an argument right - would move list boundaries",
+		() => {
+			const initialState: EditorState = parseEditorState(`function(a, b, c[) ]function(d, e, f)`);
+			const endState: EditorState = parseEditorState(`function(a, b, c[) ]function(d, e, f)`);
+			return runFileTestWithAllBrackets(initialState, ["movearguments.action.moveRight"], endState);
+		}
+	);
+	test(
+		"Move an argument left - would move list boundaries",
+		() => {
+			const initialState: EditorState = parseEditorState(`function(a, b, c) [function(]d, e, f)`);
+			const endState: EditorState = parseEditorState(`function(a, b, c) [function(]d, e, f)`);
+			return runFileTestWithAllBrackets(initialState, ["movearguments.action.moveLeft"], endState);
+		}
+	);
+	test(
+		"Move an argument right - moves list boundaries but selection included delimiters",
+		() => {
+			const initialState: EditorState = parseEditorState(`function(a, b, c[) function(]d, e, f)`);
+			const endState: EditorState = parseEditorState(`function(a, b, e, [c) function(d], f)`);
+			return runFileTestWithAllBrackets(initialState, ["movearguments.action.moveRight"], endState);
+		}
+	);
+	test(
+		"Move an argument left - moves list boundaries but selection included delimiters",
+		() => {
+			const initialState: EditorState = parseEditorState(`function(a, b, c[) function(]d, e, f)`);
+			const endState: EditorState = parseEditorState(`function(a, [c) function(d], b, e, f)`);
+			return runFileTestWithAllBrackets(initialState, ["movearguments.action.moveLeft"], endState);
+		}
+	);
+	test(
+		"Move an argument right - would move inside list boundary",
+		() => {
+			const initialState: EditorState = parseEditorState(`a[],function(d, e, f)`);
+			const endState: EditorState = parseEditorState(`a[],function(d, e, f)`);
+			return runFileTestWithAllBrackets(initialState, ["movearguments.action.moveRight"], endState);
+		}
+	);
+	test(
+		"Move an argument left - would move inside list boundary",
+		() => {
+			const initialState: EditorState = parseEditorState(`function(a, b, c), []d`);
+			const endState: EditorState = parseEditorState(`function(a, b, c), []d`);
+			return runFileTestWithAllBrackets(initialState, ["movearguments.action.moveLeft"], endState);
+		}
+	);
+	test(
+		"Move an argument containing a single argument list right",
+		() => {
+			const initialState: EditorState = parseEditorState(`function(a, []call(b), d)`);
+			const endState: EditorState = parseEditorState(`function(a, d, [call(b)])`);
+			return runFileTestWithAllBrackets(initialState, ["movearguments.action.moveRight"], endState);
+		}
+	);
+	test(
+		"Move an argument containing a single argument list left",
+		() => {
+			const initialState: EditorState = parseEditorState(`function(a, call[](b), d)`);
+			const endState: EditorState = parseEditorState(`function([call(b)], a, d)`);
+			return runFileTestWithAllBrackets(initialState, ["movearguments.action.moveLeft"], endState);
+		}
+	);
+	test(
+		"Move an argument containing a complete list right",
+		() => {
+			const initialState: EditorState = parseEditorState(`function(a, [](b, c), d)`);
+			const endState: EditorState = parseEditorState(`function(a, d, [(b, c)])`);
+			return runFileTestWithAllBrackets(initialState, ["movearguments.action.moveRight"], endState);
+		}
+	);
+	test(
+		"Move an argument containing a complete list left",
+		() => {
+			const initialState: EditorState = parseEditorState(`function(a, [](b, c), d)`);
+			const endState: EditorState = parseEditorState(`function([(b, c)], a, d)`);
+			return runFileTestWithAllBrackets(initialState, ["movearguments.action.moveLeft"], endState);
+		}
+	);
+	test(
 		"Big file",
 		() => {
 			const padding = ("a".repeat(50) + "\n").repeat(1e3);

@@ -26,6 +26,14 @@ class Argument {
 	 */
 	private document: vscode.TextDocument;
 	/**
+	 * The original selection
+	 */
+	private originalSelection: vscode.Selection;
+	/**
+	 * The direction the argument should move
+	 */
+	private direction: "left"|"right"|"target";
+	/**
 	 * The content of the argument
 	 */
 	private content: string;
@@ -38,6 +46,14 @@ class Argument {
 	 */
 	private isLastArgument: Boolean = true;
 	/**
+	 * Number of delimiters in the argument
+	 */
+	private containedUnmatchedDelimiters: number = 0;
+	/**
+	 * Number of delimiters in the original selection
+	 */
+	private unmatchedDelimitersInOriginalSelection: number = 0;
+	/**
 	 * If the original selection was reversed
 	 */
 	private selectionIsReversed: Boolean;
@@ -46,9 +62,11 @@ class Argument {
 	 * @param document The document to work in
 	 * @param selection The original selection
 	 */
-	constructor(document: vscode.TextDocument, selection: vscode.Selection){
+	constructor(document: vscode.TextDocument, selection: vscode.Selection, direction: "left"|"right"|"target"){
 		this.selectionIsReversed = !selection.isEmpty && selection.isReversed;
 		this.document = document;
+		this.originalSelection = selection;
+		this.direction = direction;
 		
 		// find the beginning of the argument
 		const startBorderRegExp = /[,({[]([^,({[]*)$/;
@@ -123,48 +141,70 @@ class Argument {
 		
 		this.startOfContent = document.positionAt(document.offsetAt(this.startPosition) + startingWhitespace[0].length);
 		this.endOfContent = document.positionAt(document.offsetAt(this.endPosition) - finishingWhitespace[0].length);
+		
+		function getUnmatchedDelimiterCount(text: string): number{
+			let count = 0;
+			const match = {")": "(", "]": "[", "}": "{"};
+			let stack: Array<"("|"["|"{"> = [];
+			text.replace(/[(){}[\]]/g, (d) => {
+				switch(d){
+					case "(":
+					case "[":
+					case "{":
+						stack.unshift(d);
+						break;
+					case ")":
+					case "]":
+					case "}":
+						if (stack[0] === match[d]){
+							stack.shift();
+						}
+						else {
+							count += 1;
+						}
+						break;
+				}
+				return d;
+			});
+			count += stack.length;
+			return count;
+		}
+		this.containedUnmatchedDelimiters = getUnmatchedDelimiterCount(this.content);
+		this.unmatchedDelimitersInOriginalSelection = getUnmatchedDelimiterCount(document.getText(selection));
 	}
 	
 	/**
-	 * Cache for the getPreviousArgument function.
+	 * Cache for the target.
 	 */
-	private previousCache: Argument|null = null;
+	private targetCache: Argument|null = null;
 	/**
-	 * @return The previous argument in the list or null if there is none.
+	 * The target argument after the movement
 	 */
-	getPreviousArgument(){
-		if (!this.isFirstArgument){
-			if (!this.previousCache){
-				const beforeComma = this.startPosition.translate(undefined, -1);
-				this.previousCache = new Argument(this.document, new vscode.Selection(beforeComma, beforeComma));
-				this.previousCache.selectionIsReversed = this.selectionIsReversed;
+	get target(){
+		if (
+			!this.targetCache &&
+			this.direction !== "target"
+		){
+			const moveLeft = this.direction === "left";
+			const isAtBorder = moveLeft? this.isFirstArgument: this.isLastArgument;
+			if (!isAtBorder){
+				const targetPosition = (moveLeft? this.startPosition: this.endPosition).translate(undefined, moveLeft? -1: 1);
+				this.targetCache = new Argument(this.document, new vscode.Selection(targetPosition, targetPosition), "target");
+				this.targetCache.selectionIsReversed = this.selectionIsReversed;
 			}
-			return this.previousCache;
 		}
-		else {
-			return null;
-		}
+		return this.targetCache;
 	}
 	
 	/**
-	 * Cache for the getNextArgument function.
+	 * If the argument is valid
 	 */
-	private nextCache: Argument|null = null;
-	/**
-	 * @return The next argument in the list or null if there is none.
-	 */
-	getNextArgument(){
-		if (!this.isLastArgument){
-			if (!this.nextCache){
-				const afterComma = this.endPosition.translate(undefined, 1);
-				this.nextCache = new Argument(this.document, new vscode.Selection(afterComma, afterComma));
-				this.nextCache.selectionIsReversed = this.selectionIsReversed;
-			}
-			return this.nextCache;
-		}
-		else {
-			return null;
-		}
+	get valid(): boolean{
+		return this.containedUnmatchedDelimiters <= this.unmatchedDelimitersInOriginalSelection &&
+			(
+				!this.target ||
+				this.target.valid
+			);
 	}
 	
 	/**
@@ -192,9 +232,11 @@ class Argument {
 	 * Selection of the content of the argument
 	 */
 	get selection(){
-		return this.selectionIsReversed?
-			new vscode.Selection(this.endOfContent, this.startOfContent):
-			new vscode.Selection(this.startOfContent, this.endOfContent);
+		return this.valid? (
+			this.selectionIsReversed?
+				new vscode.Selection(this.endOfContent, this.startOfContent):
+				new vscode.Selection(this.startOfContent, this.endOfContent)
+			): this.originalSelection;
 	}
 	
 	/**
@@ -326,15 +368,14 @@ class ArgumentMover {
   * 
   * @param argument The argument to get the first in the line.
   * @param list The list of arguments to skip.
-  * @param targetArgumentFunction The function name to use to get the target argument of the line.
   * @return The first argument in the line or null if the line ends at the border of the text.
   */
-function getFirstInLine(argument: Argument, list: Argument[], targetArgumentFunction: "getPreviousArgument"|"getNextArgument"): Argument|null{
+function getFirstInLine(argument: Argument, list: Argument[]): Argument|null{
 	for (let i = 0; i < list.length; i += 1){
 		if (list[i].equals(argument)){
-			const targetArgument = list[i][targetArgumentFunction]();
+			const targetArgument = list[i].target;
 			if (targetArgument){
-				return getFirstInLine(targetArgument, list, targetArgumentFunction);
+				return getFirstInLine(targetArgument, list);
 			}
 			else {
 				return null;
@@ -349,13 +390,16 @@ function getFirstInLine(argument: Argument, list: Argument[], targetArgumentFunc
  * 
  * @param editor Native editor object provided by the API
  * @param edit Native edit object provided by the API
- * @param targetArgumentFunction Function to be called on the argument to get the target spot
+ * @param direction Direction the arguments should be moved
  */
-function move(editor: vscode.TextEditor, edit: vscode.TextEditorEdit, targetArgumentFunction: "getPreviousArgument"|"getNextArgument"){
+function move(editor: vscode.TextEditor, edit: vscode.TextEditorEdit, direction: "left"|"right"){
 	const mover = new ArgumentMover();
 	const newSelections: vscode.Selection[] = editor.selections.map((selection) => {
-		return new Argument(editor.document, selection);
+		return new Argument(editor.document, selection, direction);
 	}).filter((argument, index, list) => {
+		if (!argument.valid){
+			return true;
+		}
 		for (let i = index + 1; i < list.length; i += 1){
 			if (argument.overlap(list[i])){
 				// remove overlapping and duplicated arguments and keep the bigger argument
@@ -367,9 +411,12 @@ function move(editor: vscode.TextEditor, edit: vscode.TextEditorEdit, targetArgu
 		}
 		return true;
 	}).map((argument, index, list) => {
-		const targetArgument = argument[targetArgumentFunction]();
-		if (targetArgument){
-			const firstInLine = getFirstInLine(targetArgument, list, targetArgumentFunction);
+		if (!argument.valid){
+			return argument.selection;
+		}
+		const targetArgument = argument.target;
+		if (targetArgument && targetArgument.valid){
+			const firstInLine = getFirstInLine(targetArgument, list);
 			if (firstInLine){
 				mover.move(argument, targetArgument);
 				return targetArgument.selection;
@@ -391,7 +438,7 @@ export function activate(context: vscode.ExtensionContext) {
 	let moveLeftCommand = vscode.commands.registerTextEditorCommand(
 		'movearguments.action.moveLeft',
 		(editor, edit) => {
-			move(editor, edit, "getPreviousArgument");
+			move(editor, edit, "left");
 		}
 	);
 	context.subscriptions.push(moveLeftCommand);
@@ -400,7 +447,7 @@ export function activate(context: vscode.ExtensionContext) {
 	let moveRightCommand = vscode.commands.registerTextEditorCommand(
 		'movearguments.action.moveRight',
 		(editor, edit) => {
-			move(editor, edit, "getNextArgument");
+			move(editor, edit, "right");
 		}
 	);
 	context.subscriptions.push(moveRightCommand);

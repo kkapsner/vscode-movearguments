@@ -10,7 +10,8 @@ Adds the action movearguments.action.moveLeft and movearguments.action.moveRight
 * preserves the selection direction
 * works with multiple selections (order of the selected arguments will not be changed)
 * preserves starting and ending whitespaces from the new position
-* does not move arguments out of lists
+* does not move arguments out of lists or puts them inside lists
+* BUT if the list delimiter is selected arguments can be moved out and in
 
 ## Requirements
 
@@ -24,4 +25,5 @@ Initial release of MoveArguments. Does nothing else as what is mentioned in the 
 
 ## Known Issues
 
-String literals are not respected.
+* string literals are not respected
+* arguments containing complete lists can only be moved when selecting the complete list beforehand
